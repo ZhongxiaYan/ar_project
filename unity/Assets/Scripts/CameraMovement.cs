@@ -6,7 +6,7 @@ public class CameraMovement : MonoBehaviour {
     float zoomSpeed = 6.0f;
     float translateSpeed = 3.0f;
 
-	void Update() {
+    void Update() {
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         transform.Translate(zoomSpeed * scroll * transform.forward);
         if (Input.GetKey("up")) {

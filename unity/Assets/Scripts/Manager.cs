@@ -15,6 +15,7 @@ public class Manager : MonoBehaviour {
         newCentroid = new Dictionary<GameObject, Vector3>();
 
         GameObject obj = OBJLoader.LoadOBJFile("Assets/LEGO_CAR_B1_small.obj");
+        
         foreach (Transform childTrans in obj.transform) {
             GameObject child = childTrans.gameObject;
             Mesh mesh = child.GetComponent<MeshFilter>().mesh;
