@@ -5,14 +5,13 @@ using UnityEngine;
 public class Manager : MonoBehaviour {
     List<GameObject> orderList;
     Dictionary<GameObject, Vector3> origCentroid;
-    Dictionary<GameObject, Vector3> newCentroid;
     Vector3 baseOffset = new Vector3();
     bool isBaseSet = false;
+    public ObjectSelector selectedChildSelector = null;
 
-	void Start () {
+	void Start() {
         orderList = new List<GameObject>();
         origCentroid = new Dictionary<GameObject, Vector3>();
-        newCentroid = new Dictionary<GameObject, Vector3>();
 
         GameObject obj = OBJLoader.LoadOBJFile("Assets/LEGO_CAR_B1_small.obj");
         
@@ -32,22 +31,37 @@ public class Manager : MonoBehaviour {
             }
             mesh.vertices = vertices;
             mesh.RecalculateBounds();
+            Vector3 newCentroid = centroid + centroid;
 
             origCentroid[child] = centroid;
-            newCentroid[child] = 2 * centroid;
             child.AddComponent<MeshCollider>();
-            child.AddComponent<MouseEvent>().manager = this;
+            ObjectSelector childObjSelector = child.AddComponent<ObjectSelector>();
+            childObjSelector.manager = this;
+            childObjSelector.centroid = newCentroid;
         }
 	}
 
-    public void AddToQueue(GameObject child) {
+    public void SetSelected(ObjectSelector objSelector) {
+        ObjectSelector oldSelector = selectedChildSelector;
+        selectedChildSelector = objSelector;
+        if (oldSelector != null) {
+            oldSelector.UpdateColor();
+        }
+    }
+
+    public void AddToQueue(ObjectSelector objSelector) {
+        if (objSelector == selectedChildSelector) {
+            selectedChildSelector = null;
+        }
+        GameObject child = objSelector.gameObject;
         orderList.Add(child);
         if (!isBaseSet) {
-            baseOffset = newCentroid[child] - origCentroid[child];
+            baseOffset = objSelector.centroid - origCentroid[child];
             isBaseSet = true;
             return;
         }
-        Vector3 offset = origCentroid[child] - newCentroid[child] + baseOffset;
+        Vector3 offset = origCentroid[child] - objSelector.centroid + baseOffset;
+        Vector3 newCentroid = objSelector.centroid + offset;
         Mesh mesh = child.GetComponent<MeshFilter>().mesh;
         Vector3[] vertices = mesh.vertices;
         int i = 0;
@@ -57,6 +71,13 @@ public class Manager : MonoBehaviour {
         }
         mesh.vertices = vertices;
         mesh.RecalculateBounds();
+        objSelector.centroid = newCentroid;
+    }
+
+    void Update() {
+        if (selectedChildSelector != null && Input.GetMouseButtonDown(1)) {
+            SetSelected(null);
+        }
     }
 
 }
