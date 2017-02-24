@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class ObjectSelector : MonoBehaviour {
-    bool isHover = false;
     bool isAddedToQueue = false;
 
     static Shader standardColor = null;
@@ -11,22 +10,22 @@ public class ObjectSelector : MonoBehaviour {
     static Shader pivotColor = null;
     Material objMaterial = null;
 
-    public Manager manager = null;
+    public static Manager manager = null;
     public Vector3 centroid;
 
     void Start() {
-        standardColor = Shader.Find("Standard");
-        hoverColor = Shader.Find("Solid Yellow");
-        pivotColor = Shader.Find("Solid Blue");
+        if (standardColor == null && hoverColor == null && pivotColor == null) {
+            standardColor = Shader.Find("Standard");
+            hoverColor = Shader.Find("Solid Yellow");
+            pivotColor = Shader.Find("Solid Blue");
+        }
         objMaterial = gameObject.GetComponent<Renderer>().material;
     }
 
     public void UpdateColor() {
-        if (isAddedToQueue) {
-            objMaterial.shader = standardColor;
-        } else if (manager.selectedChildSelector == this) {
+        if (manager.pivotChildSelector == this) {
             objMaterial.shader = pivotColor;
-        } else if (isHover) {
+        } else if (manager.hoverChildSelector == this) {
             objMaterial.shader = hoverColor;
         } else {
             objMaterial.shader = standardColor;
@@ -34,29 +33,21 @@ public class ObjectSelector : MonoBehaviour {
     }
 
     void OnMouseEnter() {
-        isHover = true;
-        manager.HoverEnter(this);
+        manager.hoverChildSelector = this;
         UpdateColor();
     }
 
-    void OnMouseOver() {
-        if (manager.isTextFieldSelected) {
-            return;
-        }
-        if (Input.GetKeyUp(KeyCode.S)) {
-            manager.SetSelected(this);
-            UpdateColor();
-        } else if (Input.GetKeyUp(KeyCode.R)) {
-            manager.SetRenaming(this);
-        }
-    }
-
     void OnMouseExit() {
-        isHover = false;
+        if (manager.hoverChildSelector == this) {
+            manager.hoverChildSelector = null;
+        }
         UpdateColor();
     }
 
     void OnMouseUpAsButton() {
+        if (isAddedToQueue) {
+            return;
+        }
         manager.AddToQueue(this);
         isAddedToQueue = true;
         UpdateColor();
