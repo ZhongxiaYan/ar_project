@@ -35,13 +35,19 @@ public class ObjectSelector : MonoBehaviour {
 
     void OnMouseEnter() {
         isHover = true;
+        manager.HoverEnter(this);
         UpdateColor();
     }
 
     void OnMouseOver() {
-        if (Input.GetMouseButtonDown(2)) {
+        if (manager.isTextFieldSelected) {
+            return;
+        }
+        if (Input.GetKeyUp(KeyCode.S)) {
             manager.SetSelected(this);
             UpdateColor();
+        } else if (Input.GetKeyUp(KeyCode.R)) {
+            manager.SetRenaming(this);
         }
     }
 

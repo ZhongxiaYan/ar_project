@@ -18,6 +18,9 @@ public class CameraMovement : MonoBehaviour {
     }
 
 	void LateUpdate() {
+        if (manager.isTextFieldSelected) {
+            return;
+        }
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         transform.Translate(zoomSpeed * Time.deltaTime * scroll * Vector3.forward);
         if (Input.GetKey(KeyCode.LeftControl)) {
