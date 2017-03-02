@@ -17,9 +17,13 @@ public class Manager : MonoBehaviour {
 
         GameObject obj = OBJLoader.LoadOBJFile("Assets/LEGO_CAR_B1_small.obj");
 
-        ObjectSelector.manager = this;
+        List<GameObject> children = new List<GameObject>();
         foreach (Transform childTrans in obj.transform) {
-            GameObject child = childTrans.gameObject;
+            children.Add(childTrans.gameObject);
+        }
+
+        ObjectSelector.manager = this;
+        foreach (GameObject child in children) {
             Mesh mesh = child.GetComponent<MeshFilter>().mesh;
             Vector3[] vertices = mesh.vertices;
             Vector3 centroid = new Vector3();
@@ -41,6 +45,9 @@ public class Manager : MonoBehaviour {
             origCentroid[childObjSelector] = centroid;
             childObjSelector.centroid = newCentroid;
         }
+
+        cameraMovement.LookAtZoom(children);
+
 	}
 
     public void AddToQueue(ObjectSelector objSelector) {
