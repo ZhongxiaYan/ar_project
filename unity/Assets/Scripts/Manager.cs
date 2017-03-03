@@ -47,7 +47,6 @@ public class Manager : MonoBehaviour {
         }
 
         cameraMovement.LookAtZoom(children);
-
 	}
 
     public void AddToQueue(ObjectSelector objSelector) {

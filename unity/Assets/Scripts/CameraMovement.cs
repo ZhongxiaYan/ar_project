@@ -7,6 +7,12 @@ public class CameraMovement : MonoBehaviour {
     float translateSpeed = 100f;
     float turnSpeed = 100f;
 
+    Camera cameraComponent = null;
+
+    void Start() {
+        cameraComponent = gameObject.GetComponent<Camera>();
+    }
+
     public void ScrollTranslate(float scroll, Vector3 v) {
         transform.Translate(zoomSpeed * Time.deltaTime * scroll * v);
     }
@@ -55,17 +61,25 @@ public class CameraMovement : MonoBehaviour {
         }
         centroid /= objects.Count;
         transform.LookAt(centroid);
-        float nearClipPlaneDist = gameObject.GetComponent<Camera>().nearClipPlane;
+        float nearClipPlaneDist = cameraComponent.nearClipPlane;
+        float nearClipPlaneUpDist = nearClipPlaneDist * Mathf.Tan(cameraComponent.fieldOfView * 0.5f * Mathf.Deg2Rad);
+        float nearClipPlaneRightDist = nearClipPlaneUpDist * cameraComponent.aspect;
         float moveForwardDist = float.PositiveInfinity;
-        float maxRadius = 0f;
         for (int i = 0; i < centroids.Count; i++) {
             Vector3 objCentroid = centroids[i];
             float radius = radii[i];
             Vector3 vec = objCentroid - transform.position;
-            float disp = Vector3.Dot(vec, transform.forward);
-            moveForwardDist = System.Math.Min(moveForwardDist, disp - radius - nearClipPlaneDist);
-            maxRadius = System.Math.Max(maxRadius, radius);
+            float forwardDisp = Vector3.Dot(vec, transform.forward);
+            moveForwardDist = Mathf.Min(moveForwardDist, forwardDisp - radius - nearClipPlaneDist);
+            float upDisp = Mathf.Abs(Vector3.Dot(vec, transform.up)) + radius;
+            if (upDisp > nearClipPlaneUpDist / nearClipPlaneDist * (forwardDisp - moveForwardDist)) {
+                moveForwardDist = forwardDisp - upDisp * nearClipPlaneDist / nearClipPlaneUpDist;
+            }
+            float rightDisp = Mathf.Abs(Vector3.Dot(vec, transform.right)) + radius;
+            if (rightDisp > nearClipPlaneRightDist / nearClipPlaneDist * (forwardDisp - moveForwardDist)) {
+                moveForwardDist = forwardDisp - rightDisp * nearClipPlaneDist / nearClipPlaneRightDist;
+            }
         }
-        transform.Translate(Vector3.forward * (moveForwardDist - maxRadius));
+        transform.Translate(Vector3.forward * moveForwardDist);
     }
 }
