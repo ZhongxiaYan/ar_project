@@ -6,18 +6,25 @@ using UnityEditor;
 
 public class Manager : MonoBehaviour {
     List<ObjectSelector> orderList;
+    HashSet<ObjectSelector> queueSet;
+    Dictionary<ObjectSelector, string> newNames;
     Dictionary<ObjectSelector, Vector3> origCentroid;
     Vector3 baseOffset;
-    bool isBaseSet = false;
 
 	void Start() {
         cameraMovement = GameObject.Find("Main Camera").GetComponent<CameraMovement>();
         labelInputField = GameObject.Find("Canvas/LabelInputField").GetComponent<InputField>();
         orderList = new List<ObjectSelector>();
+        queueSet = new HashSet<ObjectSelector>();
+        newNames = new Dictionary<ObjectSelector, string>();
         origCentroid = new Dictionary<ObjectSelector, Vector3>();
         renameChildSelectors = new HashSet<ObjectSelector>();
 
-        GameObject obj = OBJLoader.LoadOBJFile("Assets/LEGO_CAR_B1_small.obj");
+        // load("Assets/LEGO_CAR_B1_small.obj");
+	}
+
+    void load(string path) {
+        GameObject obj = OBJLoader.LoadOBJFile(path);
 
         List<GameObject> children = new List<GameObject>();
         foreach (Transform childTrans in obj.transform) {
@@ -46,10 +53,11 @@ public class Manager : MonoBehaviour {
             ObjectSelector childObjSelector = child.AddComponent<ObjectSelector>();
             origCentroid[childObjSelector] = centroid;
             childObjSelector.centroid = newCentroid;
+            newNames[childObjSelector] = child.name;
         }
 
         cameraMovement.LookAtZoom(children);
-	}
+    }
 
     public void LeftClick(ObjectSelector objSelector) {
         if (renameChildSelectors.Count > 0 && IsControlPressed()) {
@@ -58,12 +66,15 @@ public class Manager : MonoBehaviour {
             return;
         } else if (renameChildSelectors.Count > 0) { // don't add to queue if something was just being renamed
             return;
+        } else if (queueSet.Contains(objSelector)) { // already in queue
+            return;
         }
         // add object to queue
         orderList.Add(objSelector);
-        if (!isBaseSet) {
+        queueSet.Add(objSelector);
+        objSelector.UpdateColor();
+        if (orderList.Count == 1) { // first one, set base
             baseOffset = objSelector.centroid - origCentroid[objSelector];
-            isBaseSet = true;
             return;
         }
         Vector3 offset = origCentroid[objSelector] - objSelector.centroid + baseOffset;
@@ -99,12 +110,25 @@ public class Manager : MonoBehaviour {
             HashSet<ObjectSelector> renameSelectorsCopy = new HashSet<ObjectSelector>(renameChildSelectors);
             renameChildSelectors.Clear();
             foreach (ObjectSelector selector in renameSelectorsCopy) {
-                selector.gameObject.name = name;
+                newNames[selector] = name;
                 selector.UpdateColor();
             }
             labelInputField.DeactivateInputField();
         } else {
             labelInputField.ActivateInputField();
+        }
+    }
+
+    public void HandleLoad() {
+        load(EditorUtility.OpenFilePanel("Select Input File", "./", ""));
+    }
+
+    public void HandleExport() {
+        string path = EditorUtility.SaveFilePanel("Enter Output Path", "./", "sequence", "out");
+        using (System.IO.StreamWriter file = new System.IO.StreamWriter(path)) {
+            foreach (ObjectSelector selector in orderList) {
+                file.WriteLine(selector.gameObject.name + "," + newNames[selector]);
+            }
         }
     }
 
@@ -125,7 +149,7 @@ public class Manager : MonoBehaviour {
         }
         if (renameChildSelectors.Count == 0) { // set hover text only if no child is being renamed
             if (hoverChildSelector != null) {
-                labelInputField.text = hoverChildSelector.gameObject.name;
+                labelInputField.text = newNames[hoverChildSelector];
             } else {
                 labelInputField.text = "";
             }

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class ObjectSelector : MonoBehaviour {
-    bool isAddedToQueue = false;
 
     static Shader standardColor = null;
     static Shader hoverColor = null;
@@ -49,11 +48,7 @@ public class ObjectSelector : MonoBehaviour {
     }
 
     void OnMouseUpAsButton() {
-        if (isAddedToQueue) {
-            return;
-        }
         manager.LeftClick(this);
-        isAddedToQueue = true;
         UpdateColor();
     }
 }
