@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEditor;
 
 public class Manager : MonoBehaviour {
     List<ObjectSelector> orderList;
@@ -14,6 +15,7 @@ public class Manager : MonoBehaviour {
         labelInputField = GameObject.Find("Canvas/LabelInputField").GetComponent<InputField>();
         orderList = new List<ObjectSelector>();
         origCentroid = new Dictionary<ObjectSelector, Vector3>();
+        renameChildSelectors = new HashSet<ObjectSelector>();
 
         GameObject obj = OBJLoader.LoadOBJFile("Assets/LEGO_CAR_B1_small.obj");
 
@@ -49,7 +51,15 @@ public class Manager : MonoBehaviour {
         cameraMovement.LookAtZoom(children);
 	}
 
-    public void AddToQueue(ObjectSelector objSelector) {
+    public void LeftClick(ObjectSelector objSelector) {
+        if (renameChildSelectors.Count > 0 && IsControlPressed()) {
+            renameChildSelectors.Add(objSelector);
+            objSelector.UpdateColor();
+            return;
+        } else if (renameChildSelectors.Count > 0) { // don't add to queue if something was just being renamed
+            return;
+        }
+        // add object to queue
         orderList.Add(objSelector);
         if (!isBaseSet) {
             baseOffset = objSelector.centroid - origCentroid[objSelector];
@@ -70,20 +80,32 @@ public class Manager : MonoBehaviour {
         objSelector.centroid = newCentroid;
     }
 
-
     CameraMovement cameraMovement = null;
     public ObjectSelector hoverChildSelector = null;
     public ObjectSelector pivotChildSelector = null;
-    public ObjectSelector renamingChildSelector = null;
+    public HashSet<ObjectSelector> renameChildSelectors = null;
     InputField labelInputField = null;
 
     bool IsTextFieldFocused() {
         return labelInputField.isFocused;
     }
 
+    bool IsControlPressed() {
+        return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+    }
+
     public void HandleRename(string name) {
-        renamingChildSelector.gameObject.name = name;
-        renamingChildSelector = null;
+        if (!IsControlPressed()) {
+            HashSet<ObjectSelector> renameSelectorsCopy = new HashSet<ObjectSelector>(renameChildSelectors);
+            renameChildSelectors.Clear();
+            foreach (ObjectSelector selector in renameSelectorsCopy) {
+                selector.gameObject.name = name;
+                selector.UpdateColor();
+            }
+            labelInputField.DeactivateInputField();
+        } else {
+            labelInputField.ActivateInputField();
+        }
     }
 
     void SwapPivot(ObjectSelector newPivot) {
@@ -98,10 +120,10 @@ public class Manager : MonoBehaviour {
     }
 
     void LateUpdate() {
-        if (pivotChildSelector != null && Input.GetMouseButtonDown(1)) {
+        if (pivotChildSelector != null && Input.GetMouseButtonDown(1)) { // right click cancels the selection
             SwapPivot(null);
         }
-        if (renamingChildSelector == null) { // set hover text only if no child is being renamed
+        if (renameChildSelectors.Count == 0) { // set hover text only if no child is being renamed
             if (hoverChildSelector != null) {
                 labelInputField.text = hoverChildSelector.gameObject.name;
             } else {
@@ -113,19 +135,20 @@ public class Manager : MonoBehaviour {
             return;
         }
         if (hoverChildSelector != null) { // mouse is hovering over this child
-            if (Input.GetKeyUp(KeyCode.P)) { // assigning a pivot to the hovered child
+            if (Input.GetKey(KeyCode.P)) { // assigning a pivot to the hovered child
                 SwapPivot(hoverChildSelector);
                 cameraMovement.LookAt(pivotChildSelector.gameObject.transform.TransformPoint(pivotChildSelector.centroid));
-            } else if (Input.GetKeyUp(KeyCode.R)) { // renaming hovered child
-                renamingChildSelector = hoverChildSelector;
-                labelInputField.text = renamingChildSelector.gameObject.name;
-                labelInputField.Select();
+            } else if (pivotChildSelector == null && Input.GetKey(KeyCode.R)) { // renaming hovered child
+                renameChildSelectors.Add(hoverChildSelector);
+                hoverChildSelector.UpdateColor();
+                labelInputField.text = hoverChildSelector.gameObject.name;
+                labelInputField.ActivateInputField();
             }
         }
         // camera movements
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         cameraMovement.ScrollTranslate(scroll, Vector3.forward);
-        if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) {
+        if (IsControlPressed()) {
             if (Input.GetKey(KeyCode.UpArrow)) {
                 cameraMovement.KeyTranslate(Vector3.up);
             }

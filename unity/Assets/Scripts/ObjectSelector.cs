@@ -8,6 +8,7 @@ public class ObjectSelector : MonoBehaviour {
     static Shader standardColor = null;
     static Shader hoverColor = null;
     static Shader pivotColor = null;
+    static Shader renameColor = null;
     Material objMaterial = null;
 
     public static Manager manager = null;
@@ -18,6 +19,7 @@ public class ObjectSelector : MonoBehaviour {
             standardColor = Shader.Find("Standard");
             hoverColor = Shader.Find("Solid Yellow");
             pivotColor = Shader.Find("Solid Blue");
+            renameColor = Shader.Find("Solid Green");
         }
         objMaterial = gameObject.GetComponent<Renderer>().material;
     }
@@ -25,6 +27,8 @@ public class ObjectSelector : MonoBehaviour {
     public void UpdateColor() {
         if (manager.pivotChildSelector == this) {
             objMaterial.shader = pivotColor;
+        } else if (manager.renameChildSelectors.Contains(this)) {
+            objMaterial.shader = renameColor;
         } else if (manager.hoverChildSelector == this) {
             objMaterial.shader = hoverColor;
         } else {
@@ -48,7 +52,7 @@ public class ObjectSelector : MonoBehaviour {
         if (isAddedToQueue) {
             return;
         }
-        manager.AddToQueue(this);
+        manager.LeftClick(this);
         isAddedToQueue = true;
         UpdateColor();
     }
