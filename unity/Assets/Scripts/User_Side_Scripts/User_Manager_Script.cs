@@ -15,6 +15,8 @@ public class User_Manager_Script : MonoBehaviour
     Dictionary<string, GameObject> objectList;
     Dictionary<string, string> tableInfo;
     Dictionary<string, Vector3> newDisp;
+    Dictionary<string, Vector3> oldDisp;
+
     Vector3 totalCentroid;
     List<string> orderlist;
     int partCount;
@@ -22,6 +24,7 @@ public class User_Manager_Script : MonoBehaviour
     public enum MoveType { Time, Speed }
     public static MoveObject use = null;
     public Text titleText;
+    public 
 
     // Use this for initialization
     void Start()
@@ -31,6 +34,7 @@ public class User_Manager_Script : MonoBehaviour
 
         obj.transform.position = new Vector3(0, 0, 0);
         newDisp = new Dictionary<string, Vector3>();
+        oldDisp = new Dictionary<string, Vector3>();
         //oldDispFromCentroid = new Dictionary<string, Vector3>();
         objectList = new Dictionary<string, GameObject>();
         orderlist = new List<string>();
@@ -52,7 +56,7 @@ public class User_Manager_Script : MonoBehaviour
         loadDataFromFile("sequence");
 
         //index of the current thing
-        currentIndex = -1;
+        currentIndex = 1;
 
         totalCentroid = new Vector3();
         partCount = 0;
@@ -82,6 +86,8 @@ public class User_Manager_Script : MonoBehaviour
             GameObject child = childTrans.gameObject;
             Mesh mesh = child.GetComponent<MeshFilter>().mesh;
             Vector3[] vertices = mesh.vertices;
+
+            oldDisp[child.name] = child.transform.position;
 
             Vector3 currentcentroid = calcCentroid(vertices);
             Debug.Log(child.name);
@@ -173,8 +179,8 @@ public class User_Manager_Script : MonoBehaviour
     public void nextButtonOnClick()
     {
         Debug.Log("NextButtonClicked");
-        updateTextFields();
         moveNextObject();
+        updateTextFields();
     }
 
     public void moveNextObject()
@@ -182,19 +188,24 @@ public class User_Manager_Script : MonoBehaviour
         //get the next object to move from the orderlist at the current index
         if (currentIndex < partCount - 1)
         {
+            if (orderlist[currentIndex] != null)
+            {
+                GameObject prevchild = objectList[orderlist[currentIndex]];
+                prevchild.transform.position = oldDisp[prevchild.name];
+            }
             currentIndex++;
         }
         Debug.Log("moving" + currentIndex);
         GameObject child = objectList[orderlist[currentIndex]];
         child.transform.position = newDisp[child.name];
-        StartCoroutine(TranslateTo(child.transform, new Vector3(0, 0, 0), 1, MoveType.Time));
+        StartCoroutine(TranslateTo(child.transform, oldDisp[child.name], 1, MoveType.Time));
     }
 
     public void prevButtonOnClick()
     {
         Debug.Log("PrevButtonClicked");
-        updateTextFields();
         movePrevObject();
+        updateTextFields();
     }
 
     //not done yet
@@ -203,11 +214,14 @@ public class User_Manager_Script : MonoBehaviour
         //get the next object to move from the orderlist at the current index
         if (currentIndex > 0)
         {
+
+            GameObject prevchild = objectList[orderlist[currentIndex]];
+            prevchild.transform.position = newDisp[prevchild.name];
             currentIndex--;
         }
         Debug.Log("moving" + currentIndex);
         GameObject child = objectList[orderlist[currentIndex]];
-        child.transform.position = new Vector3(0, 0, 0);
+        child.transform.position = oldDisp[child.name];
         StartCoroutine(TranslateTo(child.transform, newDisp[child.name], 1, MoveType.Time));
     }
 
