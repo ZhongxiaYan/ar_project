@@ -1,47 +1,58 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+
+using System.Text;
+using System.IO;
 
 public class User_Manager_Script : MonoBehaviour
 {
 
     //original offset from total centroid
-    Dictionary<string, Vector3> newDisplacement;
+    //Dictionary<string, Vector3> newDisplacement;
     //Dictionary<string, Vector3> oldDispFromCentroid;
     Dictionary<string, GameObject> objectList;
-    Dictionary<GameObject, Vector3> newCentroid;
+    Dictionary<string, string> tableInfo;
+    Dictionary<string, Vector3> newDisp;
     Vector3 totalCentroid;
     List<string> orderlist;
     int partCount;
     int currentIndex;
     public enum MoveType { Time, Speed }
     public static MoveObject use = null;
+    public Text titleText;
 
     // Use this for initialization
-    void Start () {
+    void Start()
+    {
 
         GameObject obj = OBJLoader.LoadOBJFile("Assets/LEGO_CAR_B1_small.obj");
 
         obj.transform.position = new Vector3(0, 0, 0);
-        newDisplacement = new Dictionary<string, Vector3>();
+        newDisp = new Dictionary<string, Vector3>();
         //oldDispFromCentroid = new Dictionary<string, Vector3>();
         objectList = new Dictionary<string, GameObject>();
+        orderlist = new List<string>();
+        tableInfo = new Dictionary<string, string>();
 
         //trial code to set the orderlist.
-        orderlist = new List<string>();
-        orderlist.Add("5_5");
-        orderlist.Add("6_6");
-        orderlist.Add("7_7");
-        orderlist.Add("8_8");
-        orderlist.Add("1_1");
-        orderlist.Add("2_2");
-        orderlist.Add("3_3");
-        orderlist.Add("4_4");
-        orderlist.Add("9_9");
-        orderlist.Add("10_10");
+        //orderlist = new List<string>();
+        //orderlist.Add("5_5");
+        //orderlist.Add("6_6");
+        //orderlist.Add("7_7");
+        //orderlist.Add("8_8");
+        //orderlist.Add("1_1");
+        //orderlist.Add("2_2");
+        //orderlist.Add("3_3");
+        //orderlist.Add("4_4");
+        //orderlist.Add("9_9");
+        //orderlist.Add("10_10");
+
+        loadDataFromFile("sequence");
 
         //index of the current thing
-        currentIndex = 0;
+        currentIndex = -1;
 
         totalCentroid = new Vector3();
         partCount = 0;
@@ -77,22 +88,73 @@ public class User_Manager_Script : MonoBehaviour
             Debug.Log(currentcentroid + "current");
             Debug.Log(totalCentroid + "total");
             Vector3 off = currentcentroid - totalCentroid;
-            off = new Vector3(off.x, off.y * -1, off.z * -1);
+            off = new Vector3(off.x, off.y * -1, off.z * -1) * -1;
             Debug.Log(off + "offset");
             int i = 0;
-            StartCoroutine(TranslateTo(child.transform, off*-2, 2, MoveType.Time));
+            newDisp[child.name] = off * 2;
+            StartCoroutine(TranslateTo(child.transform, newDisp[child.name], 2, MoveType.Time));
 
             //Now you can move this however you want and the
             //replace method will always bring them back to
             //center view.
             //I'm not using a base part though. Hmm
             //maybe I should do that.
-            foreach (Vector3 vertex in vertices)
+        }
+    }
+ 
+    private bool loadDataFromFile(string fileName)
+    {
+        // Handle any problems that might arise when reading the text
+        try
+        {
+            string line;
+            // Create a new StreamReader, tell it which file to read and what encoding the file
+            // was saved as
+            Debug.Log("begin the try");
+            FileInfo theSourceFile = new FileInfo("Assets/sequence.out");
+            StreamReader theReader = theSourceFile.OpenText();
+            // Immediately clean up the reader after this block of code is done.
+            // You generally use the "using" statement for potentially memory-intensive objects
+            // instead of relying on garbage collection.
+            // (Do not confuse this with the using directive for namespace at the 
+            // beginning of a class!)
+
+
+            using (theReader)
             {
-                vertices[i] += 2*off;
-                i++;
+                // While there's lines left in the text file, do this:
+                do
+                {
+                    line = theReader.ReadLine();
+                    Debug.Log("line " + line);
+
+                    if (line != null)
+                    {
+                        // Do whatever you need to do with the text line, it's a string now
+                        // In this example, I split it into arguments based on comma
+                        // deliniators, then send that array to DoStuff()
+                        
+                        string[] entries = line.Split(',');
+                        Debug.Log("entries" + entries[0]);
+                        if (entries.Length == 2)
+                        {
+                            tableInfo[entries[0]] = entries[1];
+                            orderlist.Add(entries[0]);
+                        } 
+                    }
+                }
+                while (line != null);
+                // Done reading, close the reader and return true to broadcast success    
+                theReader.Close();
+                return true;
             }
-            newDisplacement[child.name] = calcCentroid(vertices) - totalCentroid;
+        }
+        // If anything broke in the try block, we throw an exception with information
+        // on what didn't work
+        catch (System.Exception e)
+        {
+            Debug.Log("ERROR: File not found");
+            return false;
         }
     }
 
@@ -111,44 +173,55 @@ public class User_Manager_Script : MonoBehaviour
     public void nextButtonOnClick()
     {
         Debug.Log("NextButtonClicked");
-        if (currentIndex < partCount)
-        {
-            moveNextObject();
-        }
+        updateTextFields();
+        moveNextObject();
     }
 
     public void moveNextObject()
     {
-        if (currentIndex < partCount-1)
+        //get the next object to move from the orderlist at the current index
+        if (currentIndex < partCount - 1)
         {
             currentIndex++;
         }
-        //get the next object to move from the orderlist at the current index
         Debug.Log("moving" + currentIndex);
         GameObject child = objectList[orderlist[currentIndex]];
+        child.transform.position = newDisp[child.name];
         StartCoroutine(TranslateTo(child.transform, new Vector3(0, 0, 0), 1, MoveType.Time));
     }
 
     public void prevButtonOnClick()
     {
         Debug.Log("PrevButtonClicked");
-        if (currentIndex >= 0)
-        {
-            movePrevObject();
-        }
+        updateTextFields();
+        movePrevObject();
     }
 
     //not done yet
     public void movePrevObject()
     {
-        if(currentIndex > 0)
+        //get the next object to move from the orderlist at the current index
+        if (currentIndex > 0)
         {
             currentIndex--;
         }
-        //get the next object to move from the orderlist at the current index
         Debug.Log("moving" + currentIndex);
         GameObject child = objectList[orderlist[currentIndex]];
-        StartCoroutine(TranslateTo(child.transform, new Vector3(2, 2, 2), 1, MoveType.Time));
+        child.transform.position = new Vector3(0, 0, 0);
+        StartCoroutine(TranslateTo(child.transform, newDisp[child.name], 1, MoveType.Time));
+    }
+
+    public void replayButtonOnClick()
+    {
+        Debug.Log("Replay Button Clicked");
+        GameObject child = objectList[orderlist[currentIndex]];
+        child.transform.position = newDisp[child.name];
+        StartCoroutine(TranslateTo(child.transform, new Vector3(0,0,0), 1, MoveType.Time));
+    }
+
+    public void updateTextFields()
+    {
+        titleText.text = "Step " + (currentIndex+1);
     }
 
     public IEnumerator TranslateTo(Transform thisTransform, Vector3 endPos, float value, MoveType moveType)
