@@ -8,8 +8,10 @@ public class Manager : MonoBehaviour {
     List<ObjectSelector> orderList;
     HashSet<ObjectSelector> queueSet;
     Dictionary<ObjectSelector, string> newNames;
+    Dictionary<string, ObjectSelector> nameToObject;
     Dictionary<ObjectSelector, Vector3> origCentroid;
     Vector3 baseOffset;
+    readonly string GROUP_SUFFIX = "_parts.csv";
 
 	void Start() {
         cameraMovement = GameObject.Find("Main Camera").GetComponent<CameraMovement>();
@@ -54,6 +56,14 @@ public class Manager : MonoBehaviour {
             origCentroid[childObjSelector] = centroid;
             childObjSelector.centroid = newCentroid;
             newNames[childObjSelector] = child.name;
+            nameToObject[child.name] = childObjSelector;
+        }
+
+        using (System.IO.StreamReader file = new System.IO.StreamReader(path + GROUP_SUFFIX)) {
+            while (!file.EndOfStream) {
+                string[] splits = file.ReadLine().Split(',');
+
+            }
         }
 
         cameraMovement.LookAtZoom(children);
@@ -120,7 +130,20 @@ public class Manager : MonoBehaviour {
     }
 
     public void HandleLoad() {
-        load(EditorUtility.OpenFilePanel("Select Input File", "./", ""));
+        try {
+            string s = EditorUtility.OpenFilePanel("Select Input File", "./", "");
+            System.Diagnostics.Process process = new System.Diagnostics.Process();
+            System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
+            startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+            startInfo.FileName = "cmd.exe";
+            startInfo.Arguments = System.String.Format("/C python Assets/Python/group_parts.py {0} {0}{1}", s, GROUP_SUFFIX);
+            process.StartInfo = startInfo;
+            process.Start();
+            process.WaitForExit();
+            load(s);
+        } catch (System.ArgumentException ae) {
+
+        }
     }
 
     public void HandleExport() {
