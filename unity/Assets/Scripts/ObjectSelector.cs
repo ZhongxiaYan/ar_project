@@ -6,29 +6,29 @@ public class ObjectSelector : MonoBehaviour {
 
     static Shader standardColor = null;
     static Shader hoverColor = null;
-    static Shader pivotColor = null;
-    static Shader renameColor = null;
+    static Shader selectColor = null;
+    static Shader groupColor = null;
     Material objMaterial = null;
 
     public static Manager manager = null;
     public Vector3 centroid;
 
     void Start() {
-        if (standardColor == null && hoverColor == null && pivotColor == null) {
+        if (standardColor == null || hoverColor == null || selectColor == null || groupColor == null) {
             standardColor = Shader.Find("Standard");
             hoverColor = Shader.Find("Solid Yellow");
-            pivotColor = Shader.Find("Solid Blue");
-            renameColor = Shader.Find("Solid Green");
+            selectColor = Shader.Find("Solid Blue");
+            groupColor = Shader.Find("Solid Green");
         }
         objMaterial = gameObject.GetComponent<Renderer>().material;
     }
 
     public void UpdateColor() {
-        if (manager.pivotChildSelector == this) {
-            objMaterial.shader = pivotColor;
-        } else if (manager.renameChildSelectors.Contains(this)) {
-            objMaterial.shader = renameColor;
-        } else if (manager.hoverChildSelector == this) {
+        if (manager.selectedObj == this || (manager.hasSelectedGroup && manager.selectedGroup.Contains(this))) {
+            objMaterial.shader = selectColor;
+        } else if (manager.selectedGroup != null && manager.selectedGroup.Contains(this)) {
+            objMaterial.shader = groupColor;
+        } else if (manager.hoverObj == this) {
             objMaterial.shader = hoverColor;
         } else {
             objMaterial.shader = standardColor;
@@ -36,19 +36,20 @@ public class ObjectSelector : MonoBehaviour {
     }
 
     void OnMouseEnter() {
-        manager.hoverChildSelector = this;
-        UpdateColor();
+        manager.Hover(this);
     }
 
     void OnMouseExit() {
-        if (manager.hoverChildSelector == this) {
-            manager.hoverChildSelector = null;
-        }
-        UpdateColor();
+        manager.Unhover(this);
     }
 
-    void OnMouseUpAsButton() {
-        manager.LeftClick(this);
-        UpdateColor();
+    public static void UpdateGroupColor(System.Collections.IEnumerable group) {
+        if (group == null) {
+            return;
+        }
+        foreach (ObjectSelector obj in group) {
+            obj.UpdateColor();
+        }
     }
+
 }

@@ -5,32 +5,34 @@ using UnityEngine.UI;
 using UnityEditor;
 
 public class Manager : MonoBehaviour {
-    List<ObjectSelector> orderList;
+    List<ObjectSelector> queue;
     HashSet<ObjectSelector> queueSet;
-    Dictionary<ObjectSelector, string> newNames;
-    Dictionary<ObjectSelector, Vector3> origCentroid;
+    Dictionary<ObjectSelector, string> objToGroupName;
+    Dictionary<ObjectSelector, Vector3> objToOrigCentroid;
+    Dictionary<string, HashSet<ObjectSelector>> groupNameToObjs;
     Vector3 baseOffset;
+    readonly string GROUP_SUFFIX = "_parts.csv";
 
 	void Start() {
         cameraMovement = GameObject.Find("Main Camera").GetComponent<CameraMovement>();
         labelInputField = GameObject.Find("Canvas/LabelInputField").GetComponent<InputField>();
-        orderList = new List<ObjectSelector>();
+        queue = new List<ObjectSelector>();
         queueSet = new HashSet<ObjectSelector>();
-        newNames = new Dictionary<ObjectSelector, string>();
-        origCentroid = new Dictionary<ObjectSelector, Vector3>();
-        renameChildSelectors = new HashSet<ObjectSelector>();
-
-        // load("Assets/LEGO_CAR_B1_small.obj");
+        objToGroupName = new Dictionary<ObjectSelector, string>();
+        objToOrigCentroid = new Dictionary<ObjectSelector, Vector3>();
+        groupNameToObjs = new Dictionary<string, HashSet<ObjectSelector>>();
 	}
 
-    void load(string path) {
-        GameObject obj = OBJLoader.LoadOBJFile(path);
+    void Load(string objPath, string groupPath) {
+        GameObject parentObj = OBJLoader.LoadOBJFile(objPath);
 
         List<GameObject> children = new List<GameObject>();
-        foreach (Transform childTrans in obj.transform) {
+        foreach (Transform childTrans in parentObj.transform) {
             children.Add(childTrans.gameObject);
         }
 
+
+        Dictionary<string, ObjectSelector> nameToObj = new Dictionary<string, ObjectSelector>();
         ObjectSelector.manager = this;
         foreach (GameObject child in children) {
             Mesh mesh = child.GetComponent<MeshFilter>().mesh;
@@ -51,35 +53,60 @@ public class Manager : MonoBehaviour {
 
             child.AddComponent<MeshCollider>();
             ObjectSelector childObjSelector = child.AddComponent<ObjectSelector>();
-            origCentroid[childObjSelector] = centroid;
+            objToOrigCentroid[childObjSelector] = centroid;
             childObjSelector.centroid = newCentroid;
-            newNames[childObjSelector] = child.name;
+            objToGroupName[childObjSelector] = child.name;
+            nameToObj[child.name] = childObjSelector;
+        }
+
+        using (System.IO.StreamReader file = new System.IO.StreamReader(groupPath)) {
+            int anonIndex = 1;
+            while (!file.EndOfStream) {
+                string[] splits = file.ReadLine().Split(',');
+                HashSet<ObjectSelector> objs = new HashSet<ObjectSelector>();
+                if (splits.Length > 1) {
+                    string groupName = "anon_" + anonIndex;
+                    anonIndex++;
+                    foreach (string name in splits) {
+                        ObjectSelector obj = nameToObj[name];
+                        objToGroupName[obj] = groupName;
+                        objs.Add(obj);
+                    }
+                    groupNameToObjs[groupName] = objs;
+                } else { // only one object in this group, use its own name as group name
+                    string name = splits[0];
+                    objs.Add(nameToObj[name]);
+                    groupNameToObjs[name] = objs;
+                }
+            }
         }
 
         cameraMovement.LookAtZoom(children);
     }
 
-    public void LeftClick(ObjectSelector objSelector) {
-        if (renameChildSelectors.Count > 0 && IsControlPressed()) {
-            renameChildSelectors.Add(objSelector);
-            objSelector.UpdateColor();
-            return;
-        } else if (renameChildSelectors.Count > 0) { // don't add to queue if something was just being renamed
-            return;
-        } else if (queueSet.Contains(objSelector)) { // already in queue
+    public void Hover(ObjectSelector obj) {
+        hoverObj = obj;
+        obj.UpdateColor();
+    }
+
+    public void Unhover(ObjectSelector obj) {
+        if (hoverObj == obj) {
+            hoverObj = null;
+            obj.UpdateColor();
+        }
+    }
+
+    void AddToQueue(ObjectSelector obj) {
+        queue.Add(obj);
+        queueSet.Add(obj);
+        obj.UpdateColor();
+        if (queue.Count == 1) { // first one, set base
+            baseOffset = obj.centroid - objToOrigCentroid[obj];
             return;
         }
-        // add object to queue
-        orderList.Add(objSelector);
-        queueSet.Add(objSelector);
-        objSelector.UpdateColor();
-        if (orderList.Count == 1) { // first one, set base
-            baseOffset = objSelector.centroid - origCentroid[objSelector];
-            return;
-        }
-        Vector3 offset = origCentroid[objSelector] - objSelector.centroid + baseOffset;
-        Vector3 newCentroid = objSelector.centroid + offset;
-        Mesh mesh = objSelector.gameObject.GetComponent<MeshFilter>().mesh;
+        Vector3 offset = objToOrigCentroid[obj] - obj.centroid + baseOffset;
+        Vector3 newCentroid = obj.centroid + offset;
+        Mesh mesh = obj.gameObject.GetComponent<MeshFilter>().mesh;
         Vector3[] vertices = mesh.vertices;
         int i = 0;
         foreach (Vector3 vertex in vertices) {
@@ -88,13 +115,16 @@ public class Manager : MonoBehaviour {
         }
         mesh.vertices = vertices;
         mesh.RecalculateBounds();
-        objSelector.centroid = newCentroid;
+        obj.centroid = newCentroid;
     }
 
     CameraMovement cameraMovement = null;
-    public ObjectSelector hoverChildSelector = null;
-    public ObjectSelector pivotChildSelector = null;
-    public HashSet<ObjectSelector> renameChildSelectors = null;
+    public ObjectSelector hoverObj = null;
+    public ObjectSelector selectedObj = null;
+    public bool hasSelectedGroup = false;
+    string selectedGroupName = System.String.Empty;
+    public HashSet<ObjectSelector> selectedGroup = null;
+    Vector3 cameraPivot;
     InputField labelInputField = null;
 
     bool IsTextFieldFocused() {
@@ -106,67 +136,137 @@ public class Manager : MonoBehaviour {
     }
 
     public void HandleRename(string name) {
-        if (!IsControlPressed()) {
-            HashSet<ObjectSelector> renameSelectorsCopy = new HashSet<ObjectSelector>(renameChildSelectors);
-            renameChildSelectors.Clear();
-            foreach (ObjectSelector selector in renameSelectorsCopy) {
-                newNames[selector] = name;
-                selector.UpdateColor();
-            }
+        if (name == selectedGroupName) { // name not changed
             labelInputField.DeactivateInputField();
-        } else {
-            labelInputField.ActivateInputField();
+            return;
         }
+        if (groupNameToObjs.ContainsKey(name)) {
+            labelInputField.ActivateInputField();
+            labelInputField.text = selectedGroupName;
+            EditorUtility.DisplayDialog("Warning", "Name conflicts with another group!", "Continue");
+            return;
+        }
+        groupNameToObjs.Remove(selectedGroupName);
+        selectedGroupName = name;
+        foreach (ObjectSelector obj in selectedGroup) {
+            objToGroupName[obj] = name;
+        }
+        groupNameToObjs[selectedGroupName] = selectedGroup;
+        labelInputField.DeactivateInputField();
+    }
+
+    void RunCommand(string command) {
+        System.Diagnostics.Process process = new System.Diagnostics.Process();
+        System.Diagnostics.ProcessStartInfo startInfo = new System.Diagnostics.ProcessStartInfo();
+        startInfo.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
+        startInfo.FileName = "cmd.exe";
+        startInfo.Arguments = System.String.Format("/C {0}", command);
+        process.StartInfo = startInfo;
+        process.Start();
+        process.WaitForExit();
     }
 
     public void HandleLoad() {
-        load(EditorUtility.OpenFilePanel("Select Input File", "./", ""));
+        try {
+            string objPath = EditorUtility.OpenFilePanel("Select Input File", "./", "");
+            string groupPath = objPath + GROUP_SUFFIX;
+            RunCommand(System.String.Format("python Assets/Python/group_parts.py {0} {1}", objPath, groupPath));
+            Load(objPath, groupPath);
+        } catch (System.ArgumentException) {
+        }
     }
 
     public void HandleExport() {
         string path = EditorUtility.SaveFilePanel("Enter Output Path", "./", "sequence", "out");
         using (System.IO.StreamWriter file = new System.IO.StreamWriter(path)) {
-            foreach (ObjectSelector selector in orderList) {
-                file.WriteLine(selector.gameObject.name + "," + newNames[selector]);
+            foreach (ObjectSelector selector in queue) {
+                file.WriteLine(selector.gameObject.name + "," + objToGroupName[selector]);
             }
         }
     }
 
-    void SwapPivot(ObjectSelector newPivot) {
-        ObjectSelector oldPivotSelector = pivotChildSelector;
-        pivotChildSelector = newPivot;
-        if (pivotChildSelector != null) {
-            pivotChildSelector.UpdateColor();
+    void SwapSelect(ObjectSelector newObj) {
+        ObjectSelector oldSelectedObj = selectedObj;
+        HashSet<ObjectSelector> oldGroup = selectedGroup;
+        selectedObj = newObj;
+        hasSelectedGroup = false;
+        selectedGroupName = System.String.Empty;
+        selectedGroup = null;
+        if (selectedObj != null) {
+            selectedGroupName = objToGroupName[selectedObj];
+            selectedGroup = groupNameToObjs[selectedGroupName];
+            ObjectSelector.UpdateGroupColor(selectedGroup);
+            selectedObj.UpdateColor();
         }
-        if (oldPivotSelector != null) {
-            oldPivotSelector.UpdateColor();
+        if (oldSelectedObj != null) {
+            ObjectSelector.UpdateGroupColor(oldGroup);
+            oldSelectedObj.UpdateColor();
         }
     }
 
     void LateUpdate() {
-        if (pivotChildSelector != null && Input.GetMouseButtonDown(1)) { // right click cancels the selection
-            SwapPivot(null);
+        if (selectedObj == null && !hasSelectedGroup) { // set hover text only if no obj or group selected
+            labelInputField.text = (hoverObj == null) ? System.String.Empty : objToGroupName[hoverObj];
         }
-        if (renameChildSelectors.Count == 0) { // set hover text only if no child is being renamed
-            if (hoverChildSelector != null) {
-                labelInputField.text = newNames[hoverChildSelector];
-            } else {
-                labelInputField.text = "";
-            }
-        }
-        // process keyboard inputs
         if (IsTextFieldFocused()) { // we're typing in a text field, ignore any keyboard inputs
             return;
         }
-        if (hoverChildSelector != null) { // mouse is hovering over this child
-            if (Input.GetKey(KeyCode.P)) { // assigning a pivot to the hovered child
-                SwapPivot(hoverChildSelector);
-                cameraMovement.LookAt(pivotChildSelector.gameObject.transform.TransformPoint(pivotChildSelector.centroid));
-            } else if (pivotChildSelector == null && Input.GetKey(KeyCode.R)) { // renaming hovered child
-                renameChildSelectors.Add(hoverChildSelector);
-                hoverChildSelector.UpdateColor();
-                labelInputField.text = hoverChildSelector.gameObject.name;
+        if (selectedObj != null) { // single object selection mode
+            if (Input.GetKey(KeyCode.Return) && !queueSet.Contains(selectedObj)) {
+                AddToQueue(selectedObj);
+            } else if (Input.GetKey(KeyCode.G)) { // select object's group
+                hasSelectedGroup = true;
+                selectedGroupName = objToGroupName[selectedObj];
+                selectedGroup = groupNameToObjs[selectedGroupName];
+                selectedObj = null;
+                ObjectSelector.UpdateGroupColor(selectedGroup);
+                cameraPivot = new Vector3();
+                foreach (ObjectSelector obj in selectedGroup) {
+                    cameraPivot += obj.gameObject.transform.TransformPoint(obj.centroid);
+                }
+                cameraPivot /= selectedGroup.Count;
+            } else if (Input.GetKey(KeyCode.F)) {
+                cameraMovement.LookAt(cameraPivot);
+            } else if (Input.GetMouseButtonDown(1)) { // right click cancel selection
+                SwapSelect(null);
+            }
+        }
+        if (hasSelectedGroup) { // single group selection mode
+            if (hoverObj != null && Input.GetMouseButtonDown(0)) { // left click on object
+                if (selectedGroup.Contains(hoverObj)) { // in group already, remove from group
+                    selectedGroup.Remove(hoverObj);
+                    HashSet<ObjectSelector> newGroup = new HashSet<ObjectSelector>();
+                    newGroup.Add(hoverObj);
+                    string newName = hoverObj.gameObject.name;
+                    if (groupNameToObjs.ContainsKey(newName)) {
+                        newName += "_";
+                    }
+                    objToGroupName[hoverObj] = newName;
+                    groupNameToObjs[newName] = newGroup;
+                } else { // add to group
+                    string currName = objToGroupName[hoverObj];
+                    HashSet<ObjectSelector> currGroup = groupNameToObjs[currName];
+                    if (currGroup.Count == 1) {
+                        groupNameToObjs.Remove(currName);
+                    } else {
+                        currGroup.Remove(hoverObj);
+                    }
+                    selectedGroup.Add(hoverObj);
+                    objToGroupName[hoverObj] = currName;
+                }
+                hoverObj.UpdateColor();
+            } else if (Input.GetKey(KeyCode.R)) { // rename group
                 labelInputField.ActivateInputField();
+            } else if (Input.GetKey(KeyCode.F)) {
+                cameraMovement.LookAt(cameraPivot);
+            } else if (Input.GetMouseButtonDown(1)) { // right click
+                SwapSelect(null);
+            }
+        } else {
+            if (hoverObj != null && Input.GetMouseButtonDown(0)) { // select an object
+                SwapSelect(hoverObj);
+                cameraPivot = selectedObj.gameObject.transform.TransformPoint(selectedObj.centroid);
+                labelInputField.text = selectedGroupName;
             }
         }
         // camera movements
@@ -186,28 +286,24 @@ public class Manager : MonoBehaviour {
                 cameraMovement.KeyTranslate(-Vector3.right);
             }
         } else {
-            Vector3 pivot = new Vector3(0, 0, 0);
-            bool selfPivot = (pivotChildSelector == null);
-            if (!selfPivot) {
-                pivot = pivotChildSelector.gameObject.transform.TransformPoint(pivotChildSelector.centroid);
-            }
+            bool selfPivot = (selectedObj == null && !hasSelectedGroup);
             if (Input.GetKey(KeyCode.UpArrow)) {
-                cameraMovement.RotateAround(pivot, Vector3.right, true, selfPivot);
+                cameraMovement.RotateAround(cameraPivot, Vector3.right, true, selfPivot);
             }
             if (Input.GetKey(KeyCode.DownArrow)) {
-                cameraMovement.RotateAround(pivot, Vector3.right, false, selfPivot);
+                cameraMovement.RotateAround(cameraPivot, Vector3.right, false, selfPivot);
             }
             if (Input.GetKey(KeyCode.Period)) {
-                cameraMovement.RotateAround(pivot, Vector3.up, true, selfPivot);
+                cameraMovement.RotateAround(cameraPivot, Vector3.up, true, selfPivot);
             }
             if (Input.GetKey(KeyCode.Comma)) {
-                cameraMovement.RotateAround(pivot, Vector3.up, false, selfPivot);
+                cameraMovement.RotateAround(cameraPivot, Vector3.up, false, selfPivot);
             }
             if (Input.GetKey(KeyCode.RightArrow)) {
-                cameraMovement.RotateAround(pivot, Vector3.forward, true, selfPivot);
+                cameraMovement.RotateAround(cameraPivot, Vector3.forward, true, selfPivot);
             }
             if (Input.GetKey(KeyCode.LeftArrow)) {
-                cameraMovement.RotateAround(pivot, Vector3.forward, false, selfPivot);
+                cameraMovement.RotateAround(cameraPivot, Vector3.forward, false, selfPivot);
             }
         }
 
