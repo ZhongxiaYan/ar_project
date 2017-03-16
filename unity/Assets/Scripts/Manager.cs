@@ -199,8 +199,10 @@ public class Manager : MonoBehaviour {
             selectedObj.UpdateColor();
         }
         if (oldSelectedObj != null) {
-            ObjectSelector.UpdateGroupColor(oldGroup);
             oldSelectedObj.UpdateColor();
+        }
+        if (oldGroup != null) {
+            ObjectSelector.UpdateGroupColor(oldGroup);
         }
     }
 
@@ -252,7 +254,7 @@ public class Manager : MonoBehaviour {
                         currGroup.Remove(hoverObj);
                     }
                     selectedGroup.Add(hoverObj);
-                    objToGroupName[hoverObj] = currName;
+                    objToGroupName[hoverObj] = selectedGroupName;
                 }
                 hoverObj.UpdateColor();
             } else if (Input.GetKey(KeyCode.R)) { // rename group
