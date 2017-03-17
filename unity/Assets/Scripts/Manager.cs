@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEditor;
+using SFB;
 
 public class Manager : MonoBehaviour {
     List<ObjectSelector> queue;
@@ -16,6 +16,9 @@ public class Manager : MonoBehaviour {
 	void Start() {
         cameraMovement = GameObject.Find("Main Camera").GetComponent<CameraMovement>();
         labelInputField = GameObject.Find("Canvas/LabelInputField").GetComponent<InputField>();
+        // dialogPanel = GameObject.Find("Canvas/DialogPanel");
+        // dialogPanel.SetActive(false);
+
         queue = new List<ObjectSelector>();
         queueSet = new HashSet<ObjectSelector>();
         objToGroupName = new Dictionary<ObjectSelector, string>();
@@ -126,6 +129,7 @@ public class Manager : MonoBehaviour {
     public HashSet<ObjectSelector> selectedGroup = null;
     Vector3 cameraPivot;
     InputField labelInputField = null;
+    GameObject dialogPanel = null;
 
     bool IsTextFieldFocused() {
         return labelInputField.isFocused;
@@ -143,7 +147,8 @@ public class Manager : MonoBehaviour {
         if (groupNameToObjs.ContainsKey(name)) {
             labelInputField.ActivateInputField();
             labelInputField.text = selectedGroupName;
-            EditorUtility.DisplayDialog("Warning", "Name conflicts with another group!", "Continue");
+            // dialogPanel.SetActive(true);
+            // EditorUtility.DisplayDialog("Warning", "Name conflicts with another group!", "Continue");
             return;
         }
         groupNameToObjs.Remove(selectedGroupName);
@@ -168,7 +173,10 @@ public class Manager : MonoBehaviour {
 
     public void HandleLoad() {
         try {
-            string objPath = EditorUtility.OpenFilePanel("Select Input File", "./", "");
+            var inExtensions = new [] {
+                new ExtensionFilter("3D Model Files", "obj"),
+            };
+            string objPath = StandaloneFileBrowser.OpenFilePanel("Select Input File", "./", inExtensions, false)[0];
             string groupPath = objPath + GROUP_SUFFIX;
             RunCommand(System.String.Format("python Assets/Python/group_parts.py {0} {1}", objPath, groupPath));
             Load(objPath, groupPath);
@@ -177,7 +185,10 @@ public class Manager : MonoBehaviour {
     }
 
     public void HandleExport() {
-        string path = EditorUtility.SaveFilePanel("Enter Output Path", "./", "sequence", "out");
+        var outExtensions = new [] {
+            new ExtensionFilter("Sequence File", "out"),
+        };
+        string path = StandaloneFileBrowser.SaveFilePanel("Enter Output Path", "./", "sequence", outExtensions);
         using (System.IO.StreamWriter file = new System.IO.StreamWriter(path)) {
             foreach (ObjectSelector selector in queue) {
                 file.WriteLine(selector.gameObject.name + "," + objToGroupName[selector]);
